@@ -383,7 +383,7 @@ function replaceMatch(src: string, m: RegExpExecArray, text: string): string {
  * line goes after the engine import, with a path that assumes the scene sits in assets/examples/.
  */
 export function addIconImport(src: string, exportName: string, moduleFile: string): string {
-  const escaped = moduleFile.replace(/\./g, "\\.");
+  const escaped = moduleFile.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const existing = new RegExp(`import\\s*\\{([^}]*)\\}\\s*from\\s*(["'][^"']*icons/${escaped}["'])\\s*;?`).exec(src);  // nosemgrep: javascript.lang.security.audit.detect-non-literal-regexp.detect-non-literal-regexp -- the icon module name, regex-escaped above
   if (existing) {
     const names = importedNames(existing[1]);
