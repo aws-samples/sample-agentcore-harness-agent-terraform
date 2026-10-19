@@ -1,0 +1,21 @@
+# Every input one deployment uses. Copy to terraform.tfvars (not committed) and fill in; hosted/scripts/deploy.sh
+# passes the image tag. With the file in place, a plain terraform plan sees the same inputs too.
+region = "us-east-1"
+name   = "aws-arch-agent"
+
+
+# "iam": only principals granted InvokeHarness reach the harness; users reach the agent over MCP through the gateways,
+# and ask_architect runs the harness for them. "cognito" opens the harness to every user of the stack's user pool.
+harness_signin       = "iam"
+enable_ask_architect = true
+
+# Roles whose MCP clients (Claude Code, Codex, Kiro through the MCP Proxy for AWS) may call the IAM gateway.
+tool_caller_role_names = []
+
+enable_guardrail                  = true
+restrict_tools_runtime_to_gateway = true
+
+enable_monitoring  = true
+alarm_email        = ""
+enable_canary      = true
+monthly_budget_usd = 50

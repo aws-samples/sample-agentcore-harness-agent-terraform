@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "aws-architecture": {
+      "command": "uvx",
+      "args": ["mcp-proxy-for-aws-cli@latest", "https://<gateway-id>.gateway.bedrock-agentcore.us-east-1.amazonaws.com/mcp", "--service", "bedrock-agentcore", "--region", "us-east-1"],
+      "timeout": 900000
+    }
+  }
+}

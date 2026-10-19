@@ -1,0 +1,33 @@
+.DS_Store
+__pycache__/
+node_modules/
+skills/aws-design-doc/vendor/
+skills/aws-archify/scenes/*
+!**/scenes/.gitkeep
+# A render's temporary entry and bundle (left behind only by a crash), and the PNG and draw.io files an in-place
+# render writes beside a gallery scene: the gallery ships .tsx and .svg only.
+skills/aws-archify/.entry-*.tsx
+skills/aws-archify/.bundle-*.mjs
+skills/aws-archify/assets/examples/*.png
+skills/aws-archify/assets/examples/*.drawio
+# Terraform local state, plans and caches
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+# One deployment's state location, written by hosted/scripts/create-state-bucket.sh
+hosted/terraform/backend.tf
+# Local secrets and env files
+*.tfvars
+!*.tfvars.example
+.env
+.env.*
+*.pem

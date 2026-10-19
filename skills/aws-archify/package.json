@@ -1,0 +1,39 @@
+{
+  "name": "aws-archify-aws-svg",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Compose AWS architecture diagrams as SVG from React components with layout primitives (HStack/VStack/Grid/Group), incremental checkpoint-and-look loop.",
+  "license": "MIT-0",
+  "author": "Amazon Web Services",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "render": "node scripts/render.ts",
+    "examples": "node scripts/render-examples.ts",
+    "watch": "node scripts/watch.ts",
+    "find": "node scripts/find-icon.ts",
+    "overlay": "node scripts/reference-overlay.ts",
+    "match": "node scripts/reference-match.ts",
+    "icons": "node scripts/build-icons.ts",
+    "typecheck": "tsc --noEmit",
+    "edit": "node scripts/edit-server.ts",
+    "edit-cli": "node scripts/edit-cli.ts"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^1.0.11",
+    "esbuild": "^0.28.2",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "typescript": "^6.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}

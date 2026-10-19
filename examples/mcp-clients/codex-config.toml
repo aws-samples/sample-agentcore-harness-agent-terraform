@@ -1,0 +1,5 @@
+# Add to ~/.codex/config.toml. ask_architect turns take minutes, so the tool timeout is 15 minutes.
+[mcp_servers.aws-architecture]
+command = "uvx"
+args = ["mcp-proxy-for-aws-cli@latest", "https://<gateway-id>.gateway.bedrock-agentcore.us-east-1.amazonaws.com/mcp", "--service", "bedrock-agentcore", "--region", "us-east-1"]
+tool_timeout_sec = 900

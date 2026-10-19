@@ -1,0 +1,1451 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Edit — __SCENE__</title>
+<style>
+  :root {
+    --bg: #0f1420; --panel: #161d2e; --line: #28324a; --fg: #e7ecf5; --mut: #8fa0c0;
+    --accent: #3b82f6; --ok: #22c55e; --warn: #f59e0b; --err: #ef4444;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--fg); height: 100vh; overflow: hidden;
+  }
+  #app { display: grid; grid-template-columns: 1fr 380px; grid-template-rows: auto 1fr; height: 100vh; }
+
+  /* Toolbar: one row across the canvas and the panel. */
+  #toolbar {
+    grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+    background: var(--panel); border-bottom: 1px solid var(--line);
+  }
+  #toolbar b { font-size: 13px; margin-right: 2px; }
+  #toolbar .sep { width: 1px; align-self: stretch; background: var(--line); margin: 0 4px; }
+  #toolbar select {
+    background: #0e1626; color: var(--fg); border: 1px solid var(--line); border-radius: 5px;
+    padding: 5px 6px; font-size: 12px; max-width: 220px;
+  }
+  #tbStatus {
+    flex: 1; text-align: right; font-size: 12px; color: var(--mut);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  #tbStatus.ok { color: var(--ok); }
+  #tbStatus.err { color: var(--err); }
+  #tbStatus.warn { color: var(--warn); }
+
+  /* Canvas and the edit-only overlays drawn into the diagram. */
+  #canvasWrap { position: relative; overflow: auto; background: #f4f6fa; }
+  #canvasWrap svg { display: block; }
+  [data-edit-id] { cursor: pointer; }
+  [data-edit-id].hov { outline: 2px dashed #3b82f6; outline-offset: 1px; }
+  .selbox { fill: none; stroke: #3b82f6; stroke-width: 2; stroke-dasharray: 6 3; pointer-events: none; }
+  /* Connect handles: a blue disc on each edge midpoint, with an arrow showing the exit direction.
+     These rules must follow [data-edit-id]: the handles carry that attribute too. */
+  .connh { cursor: crosshair; }
+  .connh circle { fill: #3b82f6; stroke: #fff; stroke-width: 1.5; }
+  .connh:hover circle { fill: #2563eb; r: 11; }
+  .connh line { stroke: #fff; stroke-width: 2; stroke-linecap: round; pointer-events: none; }
+  .connh.armed circle { fill: #22c55e; }
+  .rubber { stroke: #9aa7bd; stroke-width: 1.5; stroke-dasharray: 5 4; fill: none; pointer-events: none; opacity: .7; }
+  .rubber-dot { fill: #9aa7bd; pointer-events: none; opacity: .7; }
+  /* Delete handle: a red disc with a cross. */
+  .delh { cursor: pointer; }
+  .delh circle { fill: #ef4444; stroke: #fff; stroke-width: 1.5; }
+  .delh:hover circle { fill: #dc2626; r: 11; }
+  .delh line { stroke: #fff; stroke-width: 2; stroke-linecap: round; pointer-events: none; }
+  .delh.idle { pointer-events: none; }
+  /* Add-node handle: a green disc with a plus, on a group's bottom-right corner. */
+  .addh { cursor: pointer; }
+  .addh circle { fill: #22c55e; stroke: #fff; stroke-width: 1.5; }
+  .addh:hover circle { fill: #16a34a; r: 12; }
+  .addh line { stroke: #fff; stroke-width: 2.2; stroke-linecap: round; pointer-events: none; }
+  #connbar {
+    position: absolute; top: 8px; left: 50%; transform: translateX(-50%); background: #161d2e; color: #e7ecf5;
+    border: 1px solid #3b82f6; border-radius: 20px; padding: 6px 14px; font-size: 12px; display: none; z-index: 10;
+    box-shadow: 0 2px 10px rgba(0,0,0,.4);
+  }
+  #connbar.on { display: block; }
+  #connbar b { color: #5e9bff; }
+
+  /* Side panel. */
+  #panel {
+    background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; overflow: hidden;
+  }
+  button {
+    background: #223052; color: var(--fg); border: 1px solid var(--line); border-radius: 6px;
+    padding: 5px 9px; cursor: pointer; font-size: 12px;
+  }
+  button:hover { background: #2c3d66; }
+  button:active { transform: translateY(1px); }
+  button:disabled { opacity: .4; cursor: default; }
+  button:disabled:hover { background: #223052; }
+  button.save { background: var(--ok); border-color: var(--ok); color: #06210f; font-weight: 600; }
+  #body { padding: 12px; overflow: auto; flex: 1; }
+  .empty { color: var(--mut); padding: 20px 4px; }
+  .tag {
+    display: inline-block; background: #2b3a5c; border-radius: 4px; padding: 1px 7px; font-size: 11px; color: #cdd8f0;
+  }
+  .row { display: flex; gap: 6px; align-items: center; margin: 8px 0; }
+  .row label { width: 74px; color: var(--mut); flex: none; }
+  .row select, .row input {
+    flex: 1; background: #0e1626; color: var(--fg); border: 1px solid var(--line); border-radius: 5px;
+    padding: 5px 6px; font-size: 12px;
+  }
+  .pad {
+    display: grid; grid-template-columns: repeat(3,36px); grid-template-rows: repeat(3,30px); gap: 4px;
+    justify-content: start; margin: 6px 0;
+  }
+  .pad button { padding: 0; }
+  .pad .sp { visibility: hidden; }
+  .scalepads { display: flex; gap: 20px; }
+  .scalecol h4 { margin-top: 8px; }
+  .src { margin-top: 12px; }
+  .src pre {
+    background: #0b1120; border: 1px solid var(--line); border-radius: 6px; padding: 8px; max-height: 220px;
+    overflow: auto; font: 11px/1.4 ui-monospace, Menlo, monospace; color: #c6d2ee; white-space: pre-wrap;
+  }
+  .report { font-size: 11px; color: var(--mut); margin-top: 8px; }
+  .report .bad { color: var(--warn); }
+  h4 { margin: 14px 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--mut); }
+  #iconResults { display: flex; flex-wrap: wrap; gap: 4px; max-height: 180px; overflow: auto; margin-top: 4px; }
+
+  /* Picker: a field with a preview thumb and a search box, over a menu of options. */
+  .combo { position: relative; flex: 1; }
+  .combo .field {
+    display: flex; align-items: center; gap: 6px; background: #0e1626; border: 1px solid var(--line);
+    border-radius: 5px; padding: 3px 6px; cursor: pointer; min-height: 28px;
+  }
+  .combo .field:focus-within { border-color: var(--accent); }
+  .combo .field .thumb { flex: none; }
+  .combo .field input {
+    flex: 1; background: transparent; border: none; outline: none; color: var(--fg); font-size: 12px; min-width: 0;
+  }
+  .combo .caret { color: var(--mut); flex: none; font-size: 10px; }
+  /* The menu lives at the end of <body> with position:fixed, so neither the panel's overflow nor a
+     later field can clip or cover it. */
+  .combo-portal-menu {
+    position: fixed; z-index: 1000; background: #101a2e; border: 1px solid var(--accent); border-radius: 6px;
+    max-height: 260px; overflow: auto; box-shadow: 0 6px 20px rgba(0,0,0,.5); display: none;
+  }
+  .combo-portal-menu.open { display: block; }
+  .combo-portal-menu .opt {
+    display: flex; align-items: center; gap: 8px; padding: 5px 8px; cursor: pointer; font-size: 12px; color: #c6d2ee;
+  }
+  .combo-portal-menu .opt:hover, .combo-portal-menu .opt.active { background: #223052; }
+  .combo-portal-menu .opt.cur { color: var(--ok); }
+  .combo-portal-menu .opt .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  .combo-portal-menu .opt .sub { color: var(--mut); font-size: 10px; flex: none; }
+  .combo-portal-menu .opt .empty { color: var(--mut); }
+  /* Grid menu: picture cells (thumb above label), used where the drawing says more than the name. */
+  .combo-portal-menu.grid { display: none; }
+  .combo-portal-menu.grid.open {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding: 8px; max-height: none;
+  }
+  .combo-portal-menu.grid .opt {
+    flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; border: 1px solid transparent;
+    border-radius: 6px; text-align: center;
+  }
+  .combo-portal-menu.grid .opt:hover, .combo-portal-menu.grid .opt.active {
+    background: #1b2942; border-color: var(--accent);
+  }
+  /* After the hover rule, so the current option keeps its green border while highlighted. */
+  .combo-portal-menu.grid .opt.cur { border-color: var(--ok); }
+  .combo-portal-menu.grid .opt .lbl { flex: none; font-size: 11px; }
+  .combo-portal-menu.grid .opt .sub { display: none; }
+  .combo-portal-menu.grid.showsub .opt .sub {
+    display: block; flex: none; font-size: 9px; color: var(--mut); margin-top: -2px;
+  }
+  .combo-portal-menu.grid .opt .empty { grid-column: 1 / -1; }
+
+  /* Thumbnails: 26px in a field or list row, 52px in a grid cell. */
+  .thumb {
+    width: 26px; height: 26px; border-radius: 4px; display: flex; align-items: center; justify-content: center;
+    background: #fff; overflow: hidden; flex: none;
+  }
+  .thumb svg { width: 22px; height: 22px; display: block; }
+  .thumb.kind { background: #fff; border: 2px solid var(--line); position: relative; }
+  .thumb.kind .badge { position: absolute; left: 1px; top: 1px; width: 12px; height: 12px; }
+  .thumb.kind .sq { position: absolute; left: 1px; top: 1px; width: 11px; height: 11px; }
+  .gthumb {
+    width: 52px; height: 52px; border-radius: 6px; display: flex; align-items: center; justify-content: center;
+    background: #0e1626; overflow: hidden; flex: none;
+  }
+  .gthumb svg { width: 52px; height: 52px; display: block; }
+  .gthumb.kind { background: #fff; border: 2px solid var(--line); position: relative; }
+  .gthumb.kind .badge { position: absolute; left: 3px; top: 3px; width: 20px; height: 20px; }
+  .gthumb.kind .sq { position: absolute; left: 3px; top: 3px; width: 18px; height: 18px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="toolbar">
+    <b>Edit mode</b>
+    <select id="scenePick" title="Pick a scene" style="display:none"></select>
+    <span class="scene" id="sceneName" style="color:var(--mut);font-size:12px">__SCENE__</span>
+    <span class="sep"></span>
+    <button id="undoBtn" title="Undo last edit (⌘Z)" disabled>↶ Undo</button>
+    <button id="redoBtn" title="Redo (⇧⌘Z)" disabled>↷ Redo</button>
+    <button id="reloadBtn" title="Re-read the file &amp; re-render">↻ Reload</button>
+    <span class="sep"></span>
+    <button id="saveBtn" class="save"
+      title="Write the clean SVG to disk (the SVG is the deliverable — no PNG)">Save SVG</button>
+    <span id="tbStatus">ready</span>
+  </div>
+  <div id="canvasWrap"><div id="connbar"></div><div id="canvas"></div></div>
+  <div id="panel">
+    <div id="body">
+      <div class="empty" id="empty">Click a <b>node</b>, <b>group</b>, or <b>arrow</b> in the canvas to edit its source.</div>
+      <div id="editor" style="display:none">
+        <div><span class="tag" id="edTag"></span> <span id="edName" style="color:var(--mut)"></span></div>
+        <div id="iconPicker" style="display:none">
+          <h4>Icon</h4>
+          <div id="iconResults"></div>
+        </div>
+        <div id="fields"></div>
+        <div id="nudge" style="display:none">
+          <h4>Move</h4>
+          <div class="pad"></div>
+        </div>
+        <div id="scale" style="display:none">
+          <div class="scalepads">
+            <div class="scalecol">
+              <h4>Scale out</h4>
+              <div class="pad"></div>
+            </div>
+            <div class="scalecol">
+              <h4>Scale in</h4>
+              <div class="pad"></div>
+            </div>
+          </div>
+        </div>
+        <div class="src"><h4>Source</h4><pre id="edSrc"></pre></div>
+      </div>
+      <div class="report" id="report"></div>
+    </div>
+  </div>
+</div>
+<script>
+"use strict";
+
+// ---------------------------------------------------------------------------
+// State: everything the editor remembers between events.
+// ---------------------------------------------------------------------------
+const ui = {
+  model: null,     // the /state payload; each committed edit refreshes its elems, source, ids, targets, report
+  selected: null,  // data-edit-id of the element shown in the panel
+  scene: null,     // folder mode only: the scene file every request names in ?scene=
+  link: null,      // connect mode: { fromEditId, fromSide, anchor } once a source handle is pressed
+  kinds: {},       // group kind -> { kind, border, badge, service }, from /kinds
+  glyphs: {},      // icon export name -> preview <svg> markup ("" when the server has none)
+  thumbCount: 0,   // numbers the marker ids of diagram thumbnails so no two thumbs share one
+  pointer: null,   // client { x, y } of the last mouse event, for the delete disc's guard
+};
+
+// ---------------------------------------------------------------------------
+// DOM helpers
+// ---------------------------------------------------------------------------
+const SVG_NS = "http://www.w3.org/2000/svg";
+const byId = (id) => document.getElementById(id);
+const removeAll = (selector) => document.querySelectorAll(selector).forEach((node) => node.remove());
+const stopEvent = (event) => event.stopPropagation();
+
+function htmlEl(tag, props = {}) {
+  return Object.assign(document.createElement(tag), props);
+}
+
+function svgEl(tag, attrs = {}, children = []) {
+  const node = document.createElementNS(SVG_NS, tag);
+  for (const [name, value] of Object.entries(attrs)) node.setAttribute(name, value);
+  if (typeof children === "string") node.textContent = children;
+  else node.append(...children);
+  return node;
+}
+
+const segment = (x1, y1, x2, y2) => svgEl("line", { x1, y1, x2, y2 });
+
+// Markup here is the local renderer's SVG, icon glyphs or fixed strings. It always goes through
+// DOMParser and is appended as nodes; nothing is assigned as raw HTML.
+function setMarkup(target, markup) {
+  target.replaceChildren(...new DOMParser().parseFromString(markup, "text/html").body.childNodes);
+}
+
+const canvasSvg = () => document.querySelector("#canvas svg");
+const contentLayer = () => document.querySelector("#canvas svg g[transform]");
+const elementFor = (editId) => document.querySelector(`[data-edit-id="${editId}"]`);
+const elemOf = (editId) => ui.model.elems.find((e) => e.editId === editId);
+const tagOf = (editId) => (elemOf(editId) || {}).tag;
+const isConnectableTag = (tag) => tag === "Node" || tag === "Group" || tag === "Icon";
+
+// ---------------------------------------------------------------------------
+// Status line and layout report
+// ---------------------------------------------------------------------------
+function showStatus(text, tone = "") {
+  const status = byId("tbStatus");
+  status.textContent = text;
+  status.className = tone;
+}
+
+function showReport(report) {
+  // The riser field reads riser_ignored from here to tell whether its value can apply.
+  if (ui.model) ui.model.report = report || null;
+  const box = byId("report");
+  if (!report) { box.replaceChildren(); return; }
+  const problems = [
+    ["overlaps", report.overlaps], ["label collisions", report.label_overlaps],
+    ["clipped", report.clipped], ["misaligned", report.misaligned],
+  ].filter(([, list]) => list?.length).map(([name, list]) => name + ": " + JSON.stringify(list));
+  const summary = `aspect=${report.aspect} · icons=${report.icons} groups=${report.groups} arrows=${report.arrows}`;
+  const verdict = problems.length ? `<br><span class="bad">⚠ ${problems.join(" · ")}</span>` : "<br>✓ clean";
+  setMarkup(box, summary + verdict);
+}
+
+// ---------------------------------------------------------------------------
+// Canvas: mount the instrumented SVG and make its elements editable
+// ---------------------------------------------------------------------------
+function mountCanvas(markup) {
+  const host = byId("canvas");
+  setMarkup(host, markup);
+  const root = host.querySelector("svg");
+  if (!root) return;
+  drawEditGrid(root);
+  for (const el of host.querySelectorAll("[data-edit-id]")) wireEditable(el);
+  root.addEventListener("mousemove", (event) => {
+    if (ui.link && ui.link.anchor) drawRubberBand(event.clientX, event.clientY);
+  });
+  markSelection();
+}
+
+function wireEditable(el) {
+  const tag = tagOf(el.getAttribute("data-edit-id"));
+  addHitTarget(el, tag);
+  el.addEventListener("mouseenter", () => {
+    el.classList.add("hov");
+    if (isConnectableTag(tag)) {
+      showConnectHandles(el);
+      if (!ui.link) {
+        showDeleteHandle(el);
+        if (tag === "Group") showAddHandle(el);
+      }
+    } else if (tag === "Arrow" && !ui.link) {
+      showDeleteHandle(el);
+    }
+  });
+  el.addEventListener("mouseleave", () => {
+    el.classList.remove("hov");
+    // Give the pointer a moment to land on a handle, which sits outside the element.
+    setTimeout(() => {
+      if (document.querySelector(".connh:hover, .delh:hover, .addh:hover")) return;
+      if (ui.link) { showConnectHandles(elementFor(ui.link.fromEditId)); return; }
+      showSelectionHandles();
+    }, 40);
+  });
+  el.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if (!ui.link) select(el.getAttribute("data-edit-id"));
+  });
+}
+
+// A 1.5px line or an unfilled group border is almost impossible to point at, so each gets a wide
+// transparent twin underneath. Only the live canvas has them; the saved SVG never does.
+function addHitTarget(el, tag) {
+  const twin = (shape, width) => {
+    const hit = shape.cloneNode(false);
+    hit.setAttribute("stroke", "transparent");
+    hit.setAttribute("stroke-width", width);
+    hit.setAttribute("fill", "none");
+    // Solid even under a dashed line or border, so the gaps between the dashes are clickable too.
+    hit.removeAttribute("stroke-dasharray");
+    return hit;
+  };
+  if (tag === "Arrow") {
+    for (const path of el.querySelectorAll("path")) {
+      const hit = twin(path, "16");
+      hit.removeAttribute("marker-end");
+      hit.removeAttribute("marker-start");
+      hit.setAttribute("class", "hit");
+      el.insertBefore(hit, el.firstChild);
+    }
+  } else if (tag === "Group") {
+    // The border band only: fill stays none, so the nodes inside still get their own events.
+    const border = el.querySelector("rect");
+    if (border) {
+      const hit = twin(border, "18");
+      hit.setAttribute("class", "hit");
+      el.insertBefore(hit, el.firstChild);
+    }
+  }
+}
+
+// The engine's 8px grid (heavier every 40px) behind the diagram, marking edit mode. Never saved.
+function drawEditGrid(root) {
+  const width = root.getAttribute("width"), height = root.getAttribute("height");
+  const defs = root.querySelector("defs") || root.insertBefore(svgEl("defs"), root.firstChild);
+  if (!defs.querySelector("#editGrid")) {
+    defs.append(
+      svgEl("pattern", { id: "editGrid", width: "8", height: "8", patternUnits: "userSpaceOnUse" }, [
+        svgEl("path", { d: "M 8 0 L 0 0 0 8", fill: "none", stroke: "#E4E8EF", "stroke-width": "0.5" }),
+      ]),
+      svgEl("pattern", { id: "editGrid40", width: "40", height: "40", patternUnits: "userSpaceOnUse" }, [
+        svgEl("rect", { width: "40", height: "40", fill: "url(#editGrid)" }),
+        svgEl("path", { d: "M 40 0 L 0 0 0 40", fill: "none", stroke: "#D3D9E4", "stroke-width": "0.8" }),
+      ]),
+    );
+  }
+  root.querySelector(".editGridRect")?.remove();
+  const grid = svgEl("rect", {
+    class: "editGridRect", x: "0", y: "0", width, height, fill: "url(#editGrid40)", "pointer-events": "none",
+  });
+  // Straight after the white background, so the grid sits behind every shape.
+  const background = root.querySelector('rect[fill="#FFFFFF"]');
+  if (background && background.nextSibling) root.insertBefore(grid, background.nextSibling);
+  else root.appendChild(grid);
+}
+
+// ---------------------------------------------------------------------------
+// Selection
+// ---------------------------------------------------------------------------
+function showEditor(visible) {
+  byId("empty").style.display = visible ? "none" : "block";
+  byId("editor").style.display = visible ? "block" : "none";
+}
+
+function markSelection() {
+  document.querySelectorAll("[data-edit-id].sel").forEach((node) => node.classList.remove("sel"));
+  document.querySelector("#canvas svg .selbox")?.remove();
+  if (!ui.selected) return;
+  const el = elementFor(ui.selected);
+  if (el) {
+    el.classList.add("sel");
+    drawSelectionBox(el);
+  }
+}
+
+function drawSelectionBox(el) {
+  const root = canvasSvg();
+  if (!root) return;
+  root.querySelector(".selbox")?.remove();
+  try {
+    const box = el.getBBox();
+    const frame = svgEl("rect", {
+      class: "selbox", x: box.x - 3, y: box.y - 3, width: box.width + 6, height: box.height + 6,
+    });
+    // Into the translated content layer, where the bbox coordinates live.
+    (el.ownerSVGElement.querySelector("g[transform]") || root).appendChild(frame);
+  } catch {}
+}
+
+function clearSelection() {
+  ui.selected = null;
+  document.querySelectorAll("[data-edit-id].sel, [data-edit-id].hov")
+    .forEach((node) => node.classList.remove("sel", "hov"));
+  showEditor(false);
+  markSelection();
+  removeAll(".connh");
+  removeAll(".delh");
+  removeAll(".addh");
+}
+
+// The selected element keeps its handles until it is deselected: connect handles, delete and
+// (groups) add-node for nodes, icons and groups; delete for arrows.
+function showSelectionHandles() {
+  removeAll(".delh");
+  removeAll(".addh");
+  if (!ui.link) removeAll(".connh");
+  if (!ui.selected) return;
+  const el = elementFor(ui.selected);
+  if (!el) return;
+  const tag = tagOf(ui.selected);
+  if (isConnectableTag(tag)) {
+    showConnectHandles(el);
+    showDeleteHandle(el);
+    if (tag === "Group") showAddHandle(el);
+  } else if (tag === "Arrow") {
+    showDeleteHandle(el);
+  }
+}
+
+function select(editId) {
+  ui.selected = editId;
+  const elem = elemOf(editId);
+  if (!elem) return;
+  const { tag, props } = elem;
+  showEditor(true);
+  byId("edTag").textContent = tag;
+  byId("edName").textContent = props.id ? `#${props.id}` : (props.label || "");
+  const fields = byId("fields");
+  fields.replaceChildren();
+  for (const spec of ui.model.schema[tag] || []) {
+    fields.appendChild(fieldRow(elem, spec));
+  }
+  // An arrow re-resolves its ends from the boxes it attaches to, so a Move around it would do
+  // nothing: the pad is for elements a Move relocates.
+  byId("nudge").style.display = isConnectableTag(tag) ? "block" : "none";
+  byId("scale").style.display = tag === "Group" ? "block" : "none";
+  // A service-* group takes a custom corner icon, like a node or a bare icon.
+  const serviceGroup = tag === "Group" && typeof props.kind === "string" && props.kind.startsWith("service-");
+  const takesIcon = tag === "Node" || tag === "Icon" || serviceGroup;
+  byId("iconPicker").style.display = takesIcon ? "block" : "none";
+  if (takesIcon) buildIconPicker(props.icon || null);
+  byId("edSrc").textContent = elem.source;
+  markSelection();
+  showSelectionHandles();
+}
+
+// ---------------------------------------------------------------------------
+// Handles drawn into the content layer: connect, delete, add node
+// ---------------------------------------------------------------------------
+const SIDES = ["top", "bottom", "left", "right"];
+const OUTWARD = { top: [0, -1], bottom: [0, 1], left: [-1, 0], right: [1, 0] };
+
+function edgeMidpoint(box, side) {
+  if (side === "top") return { x: box.x + box.width / 2, y: box.y };
+  if (side === "bottom") return { x: box.x + box.width / 2, y: box.y + box.height };
+  if (side === "left") return { x: box.x, y: box.y + box.height / 2 };
+  return { x: box.x + box.width, y: box.y + box.height / 2 };
+}
+
+function handlePoint(editId, side) {
+  const el = elementFor(editId);
+  if (!el) return null;
+  let box;
+  try { box = el.getBBox(); } catch { return null; }
+  return edgeMidpoint(box, side);
+}
+
+// A small arrow centred on (x, y): a shaft plus a two-line head pointing out of `side`.
+function directionGlyph(x, y, side) {
+  const [ux, uy] = OUTWARD[side];
+  const px = -uy, py = ux;
+  const SHAFT = 4, HEAD_BACK = 3, HEAD_HALF = 3;
+  const tipX = x + ux * SHAFT, tipY = y + uy * SHAFT;
+  const tailX = x - ux * SHAFT, tailY = y - uy * SHAFT;
+  const backX = tipX - ux * HEAD_BACK, backY = tipY - uy * HEAD_BACK;
+  return [
+    segment(tailX, tailY, tipX, tipY),
+    segment(tipX, tipY, backX + px * HEAD_HALF, backY + py * HEAD_HALF),
+    segment(tipX, tipY, backX - px * HEAD_HALF, backY - py * HEAD_HALF),
+  ];
+}
+
+function drawConnectHandles(el) {
+  const layer = contentLayer();
+  if (!layer || !el) return;
+  let box;
+  try { box = el.getBBox(); } catch { return; }
+  const editId = el.getAttribute("data-edit-id");
+  for (const side of SIDES) {
+    const at = edgeMidpoint(box, side);
+    const armed = ui.link && ui.link.fromEditId === editId && ui.link.fromSide === side;
+    const handle = svgEl("g", { class: "connh" + (armed ? " armed" : "") });
+    handle.dataset.editId = editId;
+    handle.dataset.side = side;
+    handle.append(svgEl("circle", { cx: at.x, cy: at.y, r: 9 }), ...directionGlyph(at.x, at.y, side));
+    handle.addEventListener("mouseenter", stopEvent);
+    // Connecting runs on mousedown; the click that follows must not reach the canvas and deselect.
+    handle.addEventListener("mousedown", (event) => {
+      event.stopPropagation();
+      event.preventDefault();
+      pressHandle(editId, side);
+    });
+    handle.addEventListener("click", (event) => {
+      event.stopPropagation();
+      event.preventDefault();
+    });
+    layer.appendChild(handle);
+  }
+}
+
+// While connecting, the source keeps its handles lit next to the hovered target's.
+function showConnectHandles(el) {
+  removeAll(".connh");
+  drawConnectHandles(el);
+  if (ui.link && el && el.getAttribute("data-edit-id") !== ui.link.fromEditId) {
+    const source = elementFor(ui.link.fromEditId);
+    if (source) drawConnectHandles(source);
+  }
+}
+
+// Arrows get the delete disc at the middle of their line; everything else on its top-left corner.
+// A disc drawn under the pointer (an arrow entered at its midpoint, a group pointed at by its corner)
+// stays idle, letting clicks through to the element, until the pointer has moved off it: a delete is
+// always a click on a disc that was already on screen.
+function showDeleteHandle(el) {
+  removeAll(".delh");
+  const layer = contentLayer();
+  if (!layer) return;
+  const editId = el.getAttribute("data-edit-id");
+  const spot = tagOf(editId) === "Arrow" ? arrowMidpoint(el) : topLeft(el);
+  if (!spot) return;
+  const { x, y } = spot;
+  const handle = svgEl("g", { class: "delh" });
+  handle.dataset.editId = editId;
+  handle.append(
+    svgEl("circle", { cx: x, cy: y, r: 9 }), segment(x - 4, y - 4, x + 4, y + 4), segment(x + 4, y - 4, x - 4, y + 4),
+  );
+  handle.addEventListener("mouseenter", stopEvent);
+  handle.addEventListener("click", (event) => {
+    event.stopPropagation();
+    removeElement(editId);
+  });
+  layer.appendChild(handle);
+  if (pointerOnDisc(handle)) handle.classList.add("idle");
+}
+
+// Whether the last known pointer position is on the handle's disc, its white rim and a pixel or two around.
+function pointerOnDisc(handle) {
+  if (!ui.pointer) return false;
+  const disc = handle.querySelector("circle").getBoundingClientRect();
+  const dx = ui.pointer.x - (disc.left + disc.width / 2), dy = ui.pointer.y - (disc.top + disc.height / 2);
+  return Math.hypot(dx, dy) <= disc.width / 2 + 2;
+}
+
+// Runs (capturing) on every mouseover, mousemove and mousedown, so the position is current before any
+// handler draws a handle.
+function trackPointer(event) {
+  ui.pointer = { x: event.clientX, y: event.clientY };
+  for (const handle of document.querySelectorAll("#canvas .delh.idle")) {
+    if (!pointerOnDisc(handle)) handle.classList.remove("idle");
+  }
+}
+
+function arrowMidpoint(el) {
+  const line = el.querySelector("path[marker-end]:not(.hit), path[marker-start]:not(.hit), path:not(.hit):last-of-type")
+    || el.querySelector("path:not(.hit)");
+  if (!line) return null;
+  try {
+    const mid = line.getPointAtLength(line.getTotalLength() / 2);
+    return { x: mid.x, y: mid.y };
+  } catch {
+    try {
+      const box = el.getBBox();
+      return { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    } catch { return null; }
+  }
+}
+
+function topLeft(el) {
+  try {
+    const box = el.getBBox();
+    return { x: box.x, y: box.y };
+  } catch { return null; }
+}
+
+function showAddHandle(el) {
+  removeAll(".addh");
+  const layer = contentLayer();
+  if (!layer) return;
+  const editId = el.getAttribute("data-edit-id");
+  let box;
+  try { box = el.getBBox(); } catch { return; }
+  const x = box.x + box.width, y = box.y + box.height;
+  const handle = svgEl("g", { class: "addh" });
+  handle.dataset.editId = editId;
+  handle.append(
+    svgEl("circle", { cx: x, cy: y, r: 10 }), segment(x, y - 4.5, x, y + 4.5), segment(x - 4.5, y, x + 4.5, y),
+    svgEl("title", {}, "Add node inside"),
+  );
+  handle.addEventListener("mouseenter", stopEvent);
+  handle.addEventListener("click", (event) => {
+    event.stopPropagation();
+    addNodeTo(editId);
+  });
+  layer.appendChild(handle);
+}
+
+// ---------------------------------------------------------------------------
+// Connect mode: press a handle to arm, press a handle on another element to draw the arrow
+// ---------------------------------------------------------------------------
+function displayName(editId) {
+  const elem = elemOf(editId) || {};
+  return (elem.props && (elem.props.id ? "#" + elem.props.id : elem.props.label)) || elem.tag || "element";
+}
+
+function showConnectBanner(markup) {
+  const banner = byId("connbar");
+  if (!markup) {
+    banner.className = "";
+    banner.replaceChildren();
+  } else {
+    banner.className = "on";
+    setMarkup(banner, markup);
+  }
+}
+
+function stopConnecting() {
+  ui.link = null;
+  showConnectBanner(null);
+  removeAll(".rubber, .rubber-dot");
+  removeAll(".connh");
+}
+
+function armConnect(editId, side) {
+  removeAll(".addh");
+  removeAll(".delh");
+  ui.link = { fromEditId: editId, fromSide: side, anchor: handlePoint(editId, side) };
+  showConnectBanner(`Connecting from <b>${displayName(editId)}</b> (${side}) — press a + on the target. `
+    + `<span style="opacity:.7">Esc to cancel</span>`);
+  showConnectHandles(elementFor(editId));
+}
+
+function pressHandle(editId, side) {
+  // A handle on the armed element itself re-arms from that side.
+  if (!ui.link || editId === ui.link.fromEditId) { armConnect(editId, side); return; }
+  const { fromEditId, fromSide } = ui.link;
+  const command = { op: "connect", fromEditId, fromSide, toEditId: editId, toSide: side };
+  stopConnecting();
+  commit(command, "connecting…", "✓ arrow created");
+}
+
+function toContentPoint(clientX, clientY) {
+  const root = canvasSvg(), layer = contentLayer();
+  if (!root || !layer) return null;
+  const point = root.createSVGPoint();
+  point.x = clientX;
+  point.y = clientY;
+  const matrix = layer.getScreenCTM();
+  if (!matrix) return null;
+  return point.matrixTransform(matrix.inverse());
+}
+
+// The grey dashed line from the armed handle to the pointer.
+function drawRubberBand(clientX, clientY) {
+  if (!ui.link || !ui.link.anchor) return;
+  const layer = contentLayer();
+  if (!layer) return;
+  const point = toContentPoint(clientX, clientY);
+  if (!point) return;
+  const line = layer.querySelector(".rubber") || layer.appendChild(svgEl("line", { class: "rubber" }));
+  const dot = layer.querySelector(".rubber-dot") || layer.appendChild(svgEl("circle", { class: "rubber-dot", r: "3" }));
+  const { x, y } = ui.link.anchor;
+  line.setAttribute("x1", x);
+  line.setAttribute("y1", y);
+  line.setAttribute("x2", point.x);
+  line.setAttribute("y2", point.y);
+  dot.setAttribute("cx", x);
+  dot.setAttribute("cy", y);
+  // Re-append so the band stays painted above the handles.
+  layer.appendChild(line);
+  layer.appendChild(dot);
+}
+
+// ---------------------------------------------------------------------------
+// Panel fields, one row per schema prop
+// ---------------------------------------------------------------------------
+const ARROW_GEOMETRY = ["fromSide", "toSide", "head", "dashed", "elbow"];
+const CLEAR_BUTTON_STYLE = "background:#0e1626;color:var(--mut);border:1px solid var(--line);border-radius:5px;"
+  + "padding:4px 7px;font-size:11px;cursor:pointer";
+const RISER_NOTE = "⚠ no effect on this arrow — the run is straight (or uses via / elbow={false}), so there is no turn "
+  + "to move. Give it a fromSide/toSide that bends, or use via.";
+const asValue = (current) => (current != null ? String(current) : null);
+const isHex = (value) => typeof value === "string" && /^#[0-9a-fA-F]{3,8}$/.test(value.trim());
+const setPropEdit = (editId, prop, value, kind) => postEdit({ op: "setProp", editId, prop, value, kind });
+
+function fieldRow(elem, spec) {
+  const row = htmlEl("div", { className: "row" });
+  row.appendChild(htmlEl("label", { textContent: spec.prop }));
+  fieldBuilder(elem.tag, spec)({ row, elem, spec, editId: elem.editId, current: elem.props[spec.prop] });
+  return row;
+}
+
+function fieldBuilder(tag, spec) {
+  if (spec.prop === "kind" && tag === "Group") return groupKindField;
+  if (tag === "Group" && (spec.prop === "layout" || spec.prop === "align")) return arrangementField;
+  if (spec.idref) return targetField;
+  if (tag === "Arrow" && spec.choices && ARROW_GEOMETRY.includes(spec.prop)) return geometryField;
+  if (spec.color) return colorField;
+  if (spec.range) return sliderField;
+  if (spec.text) return textField;
+  return selectField;
+}
+
+function groupKindField({ row, spec, editId, current }) {
+  row.appendChild(createPicker({
+    mode: "static", grid: true, value: asValue(current), placeholder: "Search kinds…",
+    options: (spec.choices || []).map((c) => ({ value: c, label: c, sub: ui.kinds[c]?.service ? "service" : "" })),
+    thumb: (v) => kindThumb(v, true), fieldThumb: (v) => kindThumb(v, false),
+    onPick: (v) => setPropEdit(editId, "kind", v, spec.kind),
+  }).root);
+}
+
+function arrangementField({ row, spec, editId, current }) {
+  const draw = spec.prop === "layout" ? layoutThumb : alignThumb;
+  row.appendChild(createPicker({
+    mode: "static", grid: true, value: asValue(current), placeholder: "(default)",
+    options: (spec.choices || []).map((c) => ({ value: c, label: c })),
+    thumb: (v) => draw(v, true), fieldThumb: (v) => draw(v, false),
+    onPick: (v) => setPropEdit(editId, spec.prop, v, spec.kind),
+  }).root);
+}
+
+function targetField({ row, spec, editId, current }) {
+  const targets = ui.model.targets || [];
+  const options = targets.map((t) => ({ value: t.value, label: t.label, sub: t.sub || "" }));
+  // A value the list does not hold (a scene const, a template-literal id) stays selectable.
+  if (current != null && !targets.some((t) => t.value === String(current))) {
+    options.push({ value: String(current), label: String(current), sub: "custom" });
+  }
+  row.appendChild(createPicker({
+    mode: "static", value: asValue(current), placeholder: "Search nodes / groups…", options, thumb: targetThumb,
+    onPick: (v) => setPropEdit(editId, spec.prop, v, spec.kind),
+  }).root);
+}
+
+function geometryField({ row, spec, editId, current }) {
+  row.appendChild(createPicker({
+    mode: "static", grid: true, placeholder: "(auto)",
+    // A bool prop has no automatic state: absent means false.
+    value: current != null ? String(current) : (spec.kind === "bool" ? "false" : null),
+    options: (spec.choices || []).map((c) => ({ value: c, label: c })),
+    thumb: (v) => arrowOptionThumb(spec.prop, v, true), fieldThumb: (v) => arrowOptionThumb(spec.prop, v, false),
+    onPick: (v) => setPropEdit(editId, spec.prop, v, spec.kind),
+  }).root);
+}
+
+// Swatches for the palette, a box for any hex or a scene const, and a clear button. A const such as
+// BLUE shows by name and is written back as an expression; a hex is written as a string.
+function colorField({ row, spec, editId, current }) {
+  const swatches = htmlEl("div");
+  swatches.style.cssText = "display:flex;gap:4px;flex-wrap:wrap";
+  for (const swatch of spec.swatches || []) {
+    const chosen = isHex(current) && String(current).trim().toLowerCase() === swatch.value.toLowerCase();
+    const button = htmlEl("button", { title: swatch.label });
+    button.style.cssText = "width:20px;height:20px;border-radius:4px;cursor:pointer;padding:0;"
+      + `background:${swatch.value};border:2px solid ${chosen ? "#e6edf7" : "var(--line)"}`;
+    button.addEventListener("click", () => setPropEdit(editId, spec.prop, swatch.value, "string"));
+    swatches.appendChild(button);
+  }
+  const hex = htmlEl("input", { value: current ?? "", placeholder: "#232F3E (default) or a scene const" });
+  hex.style.flex = "1";
+  hex.addEventListener("change", () => postEdit({
+    op: "setProp", editId, prop: spec.prop,
+    value: hex.value.trim() === "" ? null : hex.value.trim(),
+    kind: isHex(hex.value) ? "string" : "expr",
+  }));
+  const clear = htmlEl("button", { textContent: "✕", title: "Unset (engine default #232F3E)", type: "button" });
+  clear.style.cssText = CLEAR_BUTTON_STYLE;
+  clear.addEventListener("click", () => setPropEdit(editId, spec.prop, null, "string"));
+  const entry = htmlEl("div");
+  entry.style.cssText = "display:flex;gap:5px;align-items:center";
+  entry.append(hex, clear);
+  const column = htmlEl("div");
+  column.style.cssText = "display:flex;flex-direction:column;gap:5px;flex:1";
+  column.append(swatches, entry);
+  row.appendChild(column);
+}
+
+// A slider with a live readout and a clear button that returns the prop to automatic.
+function sliderField({ row, spec, editId, current }) {
+  const { min, max, step } = spec.range;
+  const number = current != null && !isNaN(parseFloat(current)) ? parseFloat(current) : null;
+  // The value goes in last: a range input snaps its value to the bounds and step it has at that moment.
+  const slider = htmlEl("input", { type: "range", min: String(min), max: String(max), step: String(step) });
+  slider.value = String(number != null ? number : (min + max) / 2);
+  slider.style.flex = "1";
+  const readout = htmlEl("span", { textContent: number != null ? String(number) : "auto" });
+  readout.style.cssText = "min-width:34px;text-align:right;font-size:12px;color:var(--fg)";
+  const clear = htmlEl("button", { textContent: "✕", title: "Unset (auto route)", type: "button" });
+  clear.style.cssText = CLEAR_BUTTON_STYLE;
+  slider.addEventListener("input", () => { readout.textContent = slider.value; });
+  slider.addEventListener("change", () => setPropEdit(editId, spec.prop, slider.value, spec.kind));
+  clear.addEventListener("click", () => {
+    readout.textContent = "auto";
+    setPropEdit(editId, spec.prop, null, spec.kind);
+  });
+  row.append(slider, readout, clear);
+  // The report lists arrows whose geometry has no turn for a riser to move; say so rather than
+  // leave a slider that changes nothing.
+  if (spec.prop === "riser" && (ui.model.report?.riser_ignored || []).includes(editId)) {
+    slider.style.opacity = "0.45";
+    const note = htmlEl("div", { className: "bad", textContent: RISER_NOTE });
+    note.style.cssText = "flex-basis:100%;font-size:11px;line-height:1.4";
+    row.style.flexWrap = "wrap";
+    row.appendChild(note);
+  }
+}
+
+function textField({ row, spec, editId, current }) {
+  // The spec's kind decides the spelling: numeric props are expressions (name={n}).
+  const input = htmlEl("input", { value: current ?? "", placeholder: spec.kind === "expr" ? "(number, ×8)" : "(unset)" });
+  input.addEventListener("change", () => {
+    setPropEdit(editId, spec.prop, input.value === "" ? null : input.value, spec.kind || "string");
+  });
+  row.appendChild(input);
+}
+
+function selectField({ row, spec, editId, current }) {
+  const choices = spec.choices || [];
+  const dropdown = htmlEl("select");
+  const addOption = (value) => dropdown.appendChild(htmlEl("option", { value, textContent: value }));
+  addOption("(unset)");
+  for (const choice of choices) addOption(choice);
+  // A value outside the choices (an expression, say) is listed so the field still shows it.
+  if (current != null && !choices.includes(String(current))) addOption(String(current));
+  dropdown.value = current == null ? "(unset)" : String(current);
+  dropdown.addEventListener("change", () => {
+    setPropEdit(editId, spec.prop, dropdown.value === "(unset)" ? null : dropdown.value, spec.kind);
+  });
+  row.appendChild(dropdown);
+}
+
+// ---------------------------------------------------------------------------
+// Picker: a searchable field with preview thumbnails
+// ---------------------------------------------------------------------------
+// config: mode "icon" (search() asks the server) or "static" (filters `options`), value, placeholder,
+// thumb(value) for menu rows, fieldThumb(value) for the closed field (defaults to thumb), onPick(value),
+// and for grid menus grid, cols and showSub.
+function createPicker(config) {
+  const root = htmlEl("div", { className: "combo" });
+  const field = htmlEl("div", { className: "field", tabIndex: 0 });
+  const thumbSlot = htmlEl("span", { className: "thumbslot" });
+  const input = htmlEl("input", { placeholder: config.placeholder || "Search…" });
+  field.append(thumbSlot, input, htmlEl("span", { className: "caret", textContent: "▾" }));
+  root.append(field);
+  const menu = htmlEl("div", {
+    className: "menu combo-portal-menu" + (config.grid ? " grid" : "") + (config.showSub ? " showsub" : ""),
+  });
+  if (config.grid && config.cols) menu.style.gridTemplateColumns = `repeat(${config.cols}, 1fr)`;
+  document.body.appendChild(menu);
+
+  let items = [], active = -1, current = config.value ?? null;
+  const fieldThumb = config.fieldThumb || config.thumb;
+  const labelOf = (value) => {
+    const option = (config.options || []).find((o) => o.value === value);
+    return option ? option.label : (value ?? "");
+  };
+  const showCurrent = () => {
+    input.value = current == null ? "" : labelOf(current);
+    thumbSlot.replaceChildren();
+    if (current) thumbSlot.appendChild(fieldThumb(current));
+  };
+  showCurrent();
+
+  // Fixed position just under the field: as wide as the field for a list, 300px for a grid, kept
+  // inside the viewport.
+  function place() {
+    const rect = field.getBoundingClientRect();
+    const width = config.grid ? 300 : rect.width;
+    const left = Math.min(rect.left, window.innerWidth - width - 8);
+    menu.style.left = Math.max(8, left) + "px";
+    menu.style.top = (rect.bottom + 3) + "px";
+    menu.style.width = width + "px";
+  }
+
+  const highlight = () => [...menu.children].forEach((child, i) => child.classList.toggle("active", i === active));
+
+  function renderMenu() {
+    menu.replaceChildren();
+    active = -1;
+    if (!items.length) {
+      const none = htmlEl("div", { className: "opt" });
+      none.appendChild(htmlEl("span", { className: "empty", textContent: "no matches" }));
+      menu.appendChild(none);
+      return;
+    }
+    items.forEach((item, index) => {
+      const option = htmlEl("div", { className: "opt" + (item.value === current ? " cur" : "") });
+      option.appendChild(config.thumb(item.value));
+      option.appendChild(htmlEl("span", { className: "lbl", textContent: item.label }));
+      if (item.sub) option.appendChild(htmlEl("span", { className: "sub", textContent: item.sub }));
+      option.addEventListener("mouseenter", () => { active = index; highlight(); });
+      option.addEventListener("mousedown", (event) => { event.preventDefault(); choose(item.value); });
+      menu.appendChild(option);
+    });
+  }
+
+  async function refresh(query) {
+    if (config.mode === "icon") {
+      items = await config.search(query);
+    } else {
+      const needle = (query || "").toLowerCase();
+      items = (config.options || []).filter((o) =>
+        !needle || o.label.toLowerCase().includes(needle) || String(o.value).toLowerCase().includes(needle));
+    }
+    renderMenu();
+  }
+
+  const isOpen = () => menu.classList.contains("open");
+  function open() {
+    place();
+    menu.classList.add("open");
+    root.classList.add("open");
+    input.value = "";
+    input.focus();
+    refresh("");
+  }
+  function close() {
+    menu.classList.remove("open");
+    root.classList.remove("open");
+    showCurrent();
+  }
+  function choose(value) {
+    current = value;
+    config.onPick(value);
+    close();
+  }
+  const moveActive = (index) => {
+    active = index;
+    highlight();
+    menu.children[active]?.scrollIntoView({ block: "nearest" });
+  };
+
+  field.addEventListener("click", () => { if (!isOpen()) open(); });
+  let typing = null;
+  input.addEventListener("input", () => {
+    clearTimeout(typing);
+    const query = input.value;
+    typing = setTimeout(() => refresh(query), config.mode === "icon" ? 160 : 0);
+  });
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown") { event.preventDefault(); moveActive(Math.min(items.length - 1, active + 1)); }
+    else if (event.key === "ArrowUp") { event.preventDefault(); moveActive(Math.max(0, active - 1)); }
+    else if (event.key === "Enter") {
+      event.preventDefault();
+      if (active >= 0 && items[active]) choose(items[active].value);
+    }
+    else if (event.key === "Escape") { event.stopPropagation(); close(); field.blur(); }
+  });
+  // A press anywhere outside closes it; the menu is not inside `root`, so check both.
+  const onOutsidePress = (event) => { if (!root.contains(event.target) && !menu.contains(event.target)) close(); };
+  document.addEventListener("mousedown", onOutsidePress);
+  const onScroll = () => { if (isOpen()) place(); };
+  window.addEventListener("scroll", onScroll, true);
+  // When the panel is rebuilt and the field leaves the page, take the menu and listeners with it.
+  const watcher = new MutationObserver(() => {
+    if (document.body.contains(field)) return;
+    menu.remove();
+    document.removeEventListener("mousedown", onOutsidePress);
+    window.removeEventListener("scroll", onScroll, true);
+    watcher.disconnect();
+  });
+  watcher.observe(document.body, { childList: true, subtree: true });
+  return { root };
+}
+
+async function searchIcons(query) {
+  const found = await (await fetch("/icons?q=" + encodeURIComponent(query))).json();
+  return (found.icons || []).map((icon) => ({ value: icon.exportName, label: icon.name, sub: icon.type || "" }));
+}
+
+function buildIconPicker(currentIcon) {
+  const host = byId("iconResults");
+  host.replaceChildren();
+  host.appendChild(createPicker({
+    mode: "icon", value: currentIcon || null, placeholder: "Search icons (e.g. lambda, s3, rds)…",
+    thumb: iconThumb, search: searchIcons, onPick: (v) => setIcon(v),
+  }).root);
+}
+
+// ---------------------------------------------------------------------------
+// Thumbnails
+// ---------------------------------------------------------------------------
+// One fetch per export name; a re-render reuses the stored markup.
+async function fetchGlyph(exportName) {
+  if (!exportName) return "";
+  if (exportName in ui.glyphs) return ui.glyphs[exportName];
+  try {
+    const response = await fetch("/icon-svg?export=" + encodeURIComponent(exportName));
+    ui.glyphs[exportName] = response.ok ? await response.text() : "";
+  } catch {
+    ui.glyphs[exportName] = "";
+  }
+  return ui.glyphs[exportName];
+}
+
+const fillGlyph = (thumb, markup) => {
+  if (markup) setMarkup(thumb, markup);
+  else thumb.textContent = "?";
+};
+
+// The icon list runs to hundreds of rows, so a thumb fetches its glyph only once it scrolls near view.
+const lazyGlyphs = "IntersectionObserver" in window
+  ? new IntersectionObserver((entries, observer) => {
+    for (const entry of entries) {
+      if (!entry.isIntersecting) continue;
+      const thumb = entry.target, name = thumb.dataset.icon;
+      observer.unobserve(thumb);
+      if (name) fetchGlyph(name).then((markup) => fillGlyph(thumb, markup));
+    }
+  }, { rootMargin: "80px" })
+  : null;
+
+function iconThumb(exportName) {
+  const thumb = htmlEl("div", { className: "thumb" });
+  if (exportName) {
+    thumb.dataset.icon = exportName;
+    if (exportName in ui.glyphs) fillGlyph(thumb, ui.glyphs[exportName]);
+    else if (lazyGlyphs) lazyGlyphs.observe(thumb);
+    else fetchGlyph(exportName).then((markup) => fillGlyph(thumb, markup));
+  }
+  return thumb;
+}
+
+// A group kind: a white box in the kind's border colour with its corner badge, or a solid colour
+// square for a service-* kind. A borderless kind shows a dashed neutral border.
+function kindThumb(kind, big) {
+  const info = ui.kinds[kind] || null;
+  const thumb = htmlEl("div", { className: (big ? "gthumb" : "thumb") + " kind" });
+  if (!info) {
+    thumb.style.borderColor = "var(--line)";
+    return thumb;
+  }
+  const borderless = info.border === "transparent";
+  thumb.style.borderColor = borderless ? "var(--line)" : info.border;
+  if (borderless) thumb.style.borderStyle = "dashed";
+  if (info.service) {
+    const square = htmlEl("div", { className: "sq" });
+    square.style.background = info.border;
+    thumb.appendChild(square);
+  } else if (info.badge) {
+    const badge = htmlEl("div", { className: "badge" });
+    thumb.appendChild(badge);
+    fetchGlyph(info.badge).then((markup) => { if (markup) setMarkup(badge, markup); });
+  }
+  return thumb;
+}
+
+// An arrow target: its icon if it has one, a group's kind swatch, else a neutral ring.
+function targetThumb(value) {
+  const target = (ui.model.targets || []).find((t) => t.value === value);
+  if (target?.icon) return iconThumb(target.icon);
+  if (target?.group) return kindThumb(target.kind || "generic");
+  const thumb = htmlEl("div", { className: "thumb" });
+  thumb.appendChild(svgEl("svg", { viewBox: "0 0 24 24", width: "16", height: "16" }, [
+    svgEl("circle", { cx: "12", cy: "12", r: "6", fill: "none", stroke: "#8A98AD", "stroke-width": "2" }),
+  ]));
+  return thumb;
+}
+
+// Diagram thumbnails share a 48x48 drawing, crisp at 26px and at 52px. Each gets its own arrowhead
+// markers (userSpaceOnUse, so a thicker line keeps the same head).
+const LINE = "#9fc0ff";
+const OUTLINE = "#7f8ca6";
+const CHILD_FILL = "#2f4b7d", CHILD_STROKE = "#3b82f6";
+
+function diagramThumb(draw, big) {
+  const id = "dt" + ui.thumbCount++;
+  const heads = { end: `url(#${id}e)`, start: `url(#${id}s)` };
+  const marker = (markerId, refX, d) => svgEl("marker", {
+    id: markerId, markerUnits: "userSpaceOnUse", markerWidth: "8", markerHeight: "8", refX, refY: "4", orient: "auto",
+  }, [svgEl("path", {
+    d, fill: "none", stroke: LINE, "stroke-width": "1.6", "stroke-linecap": "round", "stroke-linejoin": "round",
+  })]);
+  const thumb = htmlEl("div", { className: big ? "gthumb" : "thumb" });
+  thumb.style.background = "#0e1626";
+  thumb.appendChild(svgEl("svg", { viewBox: "0 0 48 48" }, [
+    svgEl("defs", {}, [
+      marker(id + "e", "5.5", "M1.5,1.5 L6,4 L1.5,6.5"), marker(id + "s", "2.5", "M6,1.5 L1.5,4 L6,6.5"),
+    ]),
+    ...draw(heads),
+  ]));
+  return thumb;
+}
+
+// A node box of side `size` centred on (cx, cy); `on` fills it as the highlighted node.
+function nodeBox(cx, cy, size, on) {
+  const half = size / 2;
+  return svgEl("rect", {
+    x: cx - half, y: cy - half, width: size, height: size, rx: "2",
+    fill: on ? "#2f4b7d" : "none", stroke: on ? "#3b82f6" : OUTLINE, "stroke-width": "1.6",
+  });
+}
+
+const connector = (attrs) => svgEl("line", { x1: "14", y1: "24", x2: "34", y2: "24", stroke: LINE, ...attrs });
+
+// What an arrow option does: the face it leaves or enters, where the heads go, dashed or solid,
+// elbow or straight.
+function arrowOptionThumb(prop, value, big) {
+  return diagramThumb((heads) => {
+    if (prop === "fromSide" || prop === "toSide") {
+      const c = 24, hs = 6;
+      const edge = { left: [c - hs, c], right: [c + hs, c], top: [c, c - hs], bottom: [c, c + hs] }[value] || [c, c];
+      const out = { left: [-15, 0], right: [15, 0], top: [0, -15], bottom: [0, 15] }[value] || [0, 0];
+      const outer = [edge[0] + out[0], edge[1] + out[1]];
+      const [tail, tip] = prop === "toSide" ? [outer, edge] : [edge, outer];
+      return [
+        svgEl("line", {
+          x1: tail[0], y1: tail[1], x2: tip[0], y2: tip[1], stroke: LINE, "stroke-width": "2",
+          "stroke-linecap": "round", "marker-end": heads.end,
+        }),
+        nodeBox(c, c, 12, true),
+        svgEl("circle", { cx: edge[0], cy: edge[1], r: "2", fill: "#fff" }),
+      ];
+    }
+    if (prop === "head") {
+      const ends = {};
+      if (value === "end" || value === "both") ends["marker-end"] = heads.end;
+      if (value === "start" || value === "both") ends["marker-start"] = heads.start;
+      return [
+        nodeBox(8, 24, 10, false), nodeBox(40, 24, 10, false),
+        connector({ "stroke-width": "2", "stroke-linecap": "round", ...ends }),
+      ];
+    }
+    if (prop === "dashed") {
+      const dash = value === "true" ? { "stroke-dasharray": "4 3.5" } : {};
+      return [
+        nodeBox(8, 24, 10, false), nodeBox(40, 24, 10, false),
+        connector({ "stroke-width": "2.4", "stroke-linecap": "round", ...dash, "marker-end": heads.end }),
+      ];
+    }
+    if (prop === "elbow") {
+      // Offset nodes, bottom-left to top-right: rounded orthogonal turns (as the engine draws an
+      // elbow) or one straight diagonal.
+      const nodes = [nodeBox(11, 37, 10, false), nodeBox(37, 11, 10, false)];
+      if (value === "true") {
+        return [...nodes, svgEl("path", {
+          d: "M11,32 L11,28 Q11,24 15,24 L33,24 Q37,24 37,20 L37,16", fill: "none", stroke: LINE, "stroke-width": "2.2",
+          "stroke-linejoin": "round", "marker-end": heads.end,
+        })];
+      }
+      return [...nodes, svgEl("line", {
+        x1: "16", y1: "32", x2: "32", y2: "16", stroke: LINE, "stroke-width": "2.2", "stroke-linecap": "round",
+        "marker-end": heads.end,
+      })];
+    }
+    return [];
+  }, big);
+}
+
+const groupFrame = () => svgEl("rect", {
+  x: "4", y: "4", width: "40", height: "40", rx: "3", fill: "none", stroke: OUTLINE, "stroke-width": "1.4",
+});
+const childBox = (x, y, width, height) => svgEl("rect", {
+  x, y, width, height, rx: "1.5", fill: CHILD_FILL, stroke: CHILD_STROKE, "stroke-width": "1",
+});
+
+// Child boxes [x, y, w, h] for each group layout.
+const LAYOUT_CHILDREN = {
+  row: [[9, 19, 8, 10], [20, 19, 8, 10], [31, 19, 8, 10]],
+  col: [[19, 9, 10, 8], [19, 20, 10, 8], [19, 31, 10, 8]],
+  grid: [[11, 11, 11, 11], [26, 11, 11, 11], [11, 26, 11, 11], [26, 26, 11, 11]],
+  zstack: [[14, 14, 20, 20], [19, 19, 16, 16], [24, 24, 12, 12]],
+  free: [[9, 10, 9, 8], [28, 15, 9, 8], [16, 29, 9, 8]],
+};
+
+function layoutThumb(value, big) {
+  const children = Object.hasOwn(LAYOUT_CHILDREN, value) ? LAYOUT_CHILDREN[value] : [];
+  return diagramThumb(() => [groupFrame(), ...children.map(([x, y, w, h]) => childBox(x, y, w, h))], big);
+}
+
+// Three children of different heights in a row, aligned to the top, the middle or the bottom.
+function alignThumb(value, big) {
+  const heights = [22, 14, 28], lefts = [10, 21, 32];
+  const top = 10, bottom = 38;
+  return diagramThumb(() => [groupFrame(), ...heights.map((h, i) => {
+    const y = value === "start" ? top : value === "end" ? bottom - h : (top + bottom) / 2 - h / 2;
+    return childBox(lefts[i], y, "9", h);
+  })], big);
+}
+
+// ---------------------------------------------------------------------------
+// Server
+// ---------------------------------------------------------------------------
+// In folder mode every editor request names the active scene.
+function withScene(path) {
+  if (!ui.scene) return path;
+  return path + (path.includes("?") ? "&" : "?") + "scene=" + encodeURIComponent(ui.scene);
+}
+
+async function callServer(path, body) {
+  const init = body
+    ? { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }
+    : {};
+  const response = await fetch(withScene(path), init);
+  return response.json();
+}
+
+// The model, canvas, report and history buttons from a /state, /edit, /undo or /redo payload.
+function applyResult(result) {
+  const model = ui.model;
+  if (result.elems) model.elems = result.elems;
+  if (result.source != null) model.source = result.source;
+  if (result.ids) model.ids = result.ids;
+  if (result.targets) model.targets = result.targets;
+  mountCanvas(result.svg);
+  showReport(result.report);
+  byId("undoBtn").disabled = !result.canUndo;
+  byId("redoBtn").disabled = !result.canRedo;
+  // Keep the selection when the element still exists; otherwise drop every highlight and handle.
+  if (ui.selected && model.elems.some((e) => e.editId === ui.selected)) select(ui.selected);
+  else clearSelection();
+}
+
+// Post one edit: `pending` while it runs, then the error or `done`. `onSuccess` runs on the result
+// before it is applied.
+async function commit(command, pending, done, onSuccess) {
+  showStatus(pending);
+  const result = await callServer("/edit", command);
+  if (!result.ok) { showStatus("✗ " + result.error, "err"); return; }
+  if (onSuccess) onSuccess(result);
+  applyResult(result);
+  showStatus(done, "ok");
+}
+
+const postEdit = (command) => commit(command, "applying…", "✓ applied & re-rendered");
+
+function removeElement(editId) {
+  removeAll(".delh");
+  commit({ op: "delete", editId }, "deleting…", "✓ deleted", () => {
+    if (ui.selected === editId) {
+      ui.selected = null;
+      showEditor(false);
+    }
+  });
+}
+
+// The new placeholder node becomes the selection, ready for a label and an icon.
+function addNodeTo(groupEditId) {
+  const done = "✓ node added — set its label & icon";
+  commit({ op: "addNode", editId: groupEditId }, "adding node…", done, (result) => {
+    if (result.newEditId) ui.selected = result.newEditId;
+  });
+}
+
+function setIcon(exportName) {
+  if (!ui.selected) return;
+  commit({ op: "setIcon", editId: ui.selected, icon: exportName }, "setting icon…", "✓ icon set: " + exportName);
+}
+
+async function stepHistory(direction) {
+  const result = await callServer("/" + direction, {});
+  if (!result.ok) { showStatus("✗ " + result.error, "warn"); return; }
+  applyResult(result);
+  showStatus(direction === "undo" ? "✓ undone" : "✓ redone", "ok");
+}
+
+async function saveSvg() {
+  showStatus("saving SVG…");
+  const result = await callServer("/save", {});
+  if (result.ok) showStatus(`✓ saved ${result.svgPath}`, "ok");
+  else showStatus("✗ " + (result.error || ""), "err");
+}
+
+async function loadScene() {
+  showStatus("loading…");
+  const state = await callServer("/state");
+  // A scene that fails to render answers { ok: false, error }: show its first line.
+  if (!state || state.ok === false || !state.elems) {
+    showStatus("✗ " + (state && state.error ? String(state.error).split("\n")[0] : "failed to load scene"), "err");
+    return;
+  }
+  ui.model = state;
+  byId("sceneName").textContent = state.scene;
+  applyResult(state);
+  showStatus(`loaded — ${state.elems.length} editable elements`, "ok");
+}
+
+async function loadKinds() {
+  try {
+    const found = await (await fetch("/kinds")).json();
+    for (const kind of found.kinds || []) ui.kinds[kind.kind] = kind;
+  } catch {
+    // Without kind metadata the kind thumbs fall back to plain neutral swatches.
+  }
+}
+
+async function start() {
+  await loadKinds();
+  const info = await (await fetch("/scenes")).json();
+  if (info.scenes && info.scenes.length > 1) {
+    ui.scene = info.active || info.scenes[0];
+    const picker = byId("scenePick");
+    picker.style.display = "";
+    byId("sceneName").style.display = "none";
+    for (const name of info.scenes) picker.appendChild(htmlEl("option", { value: name, textContent: name }));
+    picker.value = ui.scene;
+    picker.addEventListener("change", () => {
+      ui.scene = picker.value;
+      ui.selected = null;
+      showEditor(false);
+      loadScene();
+    });
+  }
+  loadScene();
+}
+
+// ---------------------------------------------------------------------------
+// Pads, buttons and keys
+// ---------------------------------------------------------------------------
+// Each pad is a 3x3 grid: buttons on the four edges, hidden spacers in the corners and the centre.
+const move = (title, glyph, dx, dy) => ({ title, glyph, data: { dx, dy } });
+const scale = (title, glyph, side, d) => ({ title, glyph, className: "scalebtn", data: { side, d } });
+const PADS = [
+  {
+    top: move("up", "↑", "0", "-8"), left: move("left", "←", "-8", "0"),
+    right: move("right", "→", "8", "0"), bottom: move("down", "↓", "0", "8"),
+  },
+  {
+    top: scale("grow top", "↑", "top", "8"), left: scale("grow left", "←", "left", "8"),
+    right: scale("grow right", "→", "right", "8"), bottom: scale("grow bottom", "↓", "bottom", "8"),
+  },
+  {
+    top: scale("shrink top", "↓", "top", "-8"), left: scale("shrink left", "→", "left", "-8"),
+    right: scale("shrink right", "←", "right", "-8"), bottom: scale("shrink bottom", "↑", "bottom", "-8"),
+  },
+];
+
+function fillPad(pad, buttons) {
+  const spacer = () => htmlEl("div", { className: "sp" });
+  const button = ({ title, glyph, className, data }) => {
+    const node = htmlEl("button", { title, textContent: glyph });
+    if (className) node.className = className;
+    Object.assign(node.dataset, data);
+    return node;
+  };
+  pad.append(
+    spacer(), button(buttons.top), spacer(),
+    button(buttons.left), spacer(), button(buttons.right),
+    spacer(), button(buttons.bottom), spacer(),
+  );
+}
+
+function onKey(event) {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    if (ui.link) { stopConnecting(); showStatus("connect cancelled"); }
+    else if (ui.selected) clearSelection();
+    return;
+  }
+  if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
+    event.preventDefault();
+    if (event.shiftKey) { if (!byId("redoBtn").disabled) stepHistory("redo"); }
+    else if (!byId("undoBtn").disabled) stepHistory("undo");
+  }
+}
+
+function boot() {
+  document.querySelectorAll(".pad").forEach((pad, i) => fillPad(pad, PADS[i]));
+  // In connect mode a press on the blank canvas cancels; otherwise it clears the selection.
+  byId("canvasWrap").addEventListener("click", () => {
+    if (ui.link) { stopConnecting(); return; }
+    clearSelection();
+  });
+  // A move button posts a shift; a scale button posts its scale and nothing else.
+  for (const button of document.querySelectorAll(".pad button:not(.scalebtn)")) {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (!ui.selected) return;
+      postEdit({ op: "shift", editId: ui.selected, dx: +button.dataset.dx, dy: +button.dataset.dy });
+    });
+  }
+  for (const button of document.querySelectorAll(".scalebtn")) {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (!ui.selected) return;
+      postEdit({ op: "scale", editId: ui.selected, side: button.dataset.side, d: +button.dataset.d });
+    });
+  }
+  for (const type of ["mouseover", "mousemove", "mousedown"]) window.addEventListener(type, trackPointer, true);
+  byId("undoBtn").addEventListener("click", () => stepHistory("undo"));
+  byId("redoBtn").addEventListener("click", () => stepHistory("redo"));
+  document.addEventListener("keydown", onKey);
+  byId("reloadBtn").addEventListener("click", () => loadScene());
+  byId("saveBtn").addEventListener("click", () => saveSvg());
+  start();
+}
+
+boot();
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+version: 0.2
+# Builds the arm64 environment image on an ARM CodeBuild host and pushes it to ECR.
+# Inputs (environment): IMAGE_REPO_URI, IMAGE_TAG.
+phases:
+  pre_build:
+    commands:
+      - aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "${IMAGE_REPO_URI%%/*}"
+  build:
+    commands:
+      - docker build --platform linux/arm64 -f hosted/container/Dockerfile -t "$IMAGE_REPO_URI:$IMAGE_TAG" .
+      - docker run --rm "$IMAGE_REPO_URI:$IMAGE_TAG" node skills/aws-archify/scripts/render.ts skills/aws-archify/assets/examples/serverless-api.tsx /tmp/smoke.svg
+      # In the build phase, so a failed smoke render stops the push (post_build runs even when build fails).
+      - docker push "$IMAGE_REPO_URI:$IMAGE_TAG"

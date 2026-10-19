@@ -1,0 +1,94 @@
+{
+  "_about": "Word lists and limits for lint-doc.py. Words match whole words, case-insensitive, outside code, links and HTML comments. Edit this file rather than the script.",
+
+  "weasel_tier1": {
+    "level": "warning",
+    "why": "vague or hedging word; say what, how much, or who",
+    "words": ["about", "almost", "around", "close", "closely", "considerably", "essentially",
+              "generally", "just", "mainly", "primarily", "somewhat", "typical",
+              "typically", "usually", "various", "very", "aim to", "believe", "could", "expect",
+              "feel", "hope", "maybe", "might", "planning", "seems", "strive", "think", "try",
+              "would", "aligned", "collaborated", "dramatic", "dramatically", "easy",
+              "effective", "effectively", "enable", "enables", "established", "extreme",
+              "extremely", "flexible", "great", "in due time", "lot", "lots", "material",
+              "meticulous", "meticulously", "non-trivial", "overwhelming", "partner with",
+              "poor", "possibly", "seamless", "seamlessly", "soon", "streamline", "synergy",
+              "trending", "trivial"]
+  },
+  "weasel_tier1_info": {
+    "level": "info",
+    "why": "tier 1 weasel word that is often correct in a technical design; check it is",
+    "words": ["can", "may", "should", "only", "supports", "was", "common", "main"]
+  },
+  "weasel_tier2": {
+    "level": "info",
+    "why": "comparative or quantity word with no number next to it",
+    "number_window_words": 4,
+    "words": ["always", "better", "bigger", "disproportionate", "disproportionately", "fast",
+              "faster", "greater", "high", "higher", "large", "larger", "low", "lower", "more",
+              "most", "relative", "relatively", "risky", "safe", "safer", "slow", "slower",
+              "small", "smaller", "strong", "strongly", "worse", "few", "frequent",
+              "frequently", "future", "many", "multiple", "near", "nearly", "often", "optimize",
+              "several", "significant", "significantly", "some"]
+  },
+  "guarantee": {
+    "level": "warning",
+    "why": "guarantee or superlative; customer-facing text says 'designed to' or 'intended to'",
+    "words": ["ensures", "guarantee", "guarantees", "guaranteed", "will deliver",
+              "you will achieve", "fully secure", "100%", "best", "fastest", "cheapest",
+              "industry-leading", "cutting-edge", "state-of-the-art", "world-class",
+              "bulletproof", "unbreakable"],
+    "except": ["best practice", "best practices", "best effort", "best-effort"]
+  },
+  "temporal": {
+    "level": "warning",
+    "why": "dates the text; state the fact, and the date it was checked if it matters",
+    "words": ["currently", "now supports", "recently", "as of", "new feature",
+              "at the time of writing"]
+  },
+
+  "sentence_max_words": 40,
+
+  "acronym_allowlist": ["ACM", "ADR", "AI", "ALB", "AMI", "API", "ARN", "ASG", "ASN", "AWS",
+    "AZ", "BGP", "CD", "CDN", "CI", "CIDR", "CLI", "CPU", "CSS", "CSV", "DB", "DHCP", "DNS",
+    "DR", "EBS", "EC2", "ECR", "ECS", "EFS", "EKS", "ELB", "EU", "FAQ", "FIXME", "FTP", "GB",
+    "GiB", "GPU", "HA", "HLD", "HTML", "HTTP", "HTTPS", "IaC", "IAM", "ID", "IDE", "IP",
+    "IPv4", "IPv6", "JSON", "JWT", "KB", "KMS", "KPI", "LDAP", "LLD", "LLM", "MB", "MFA", "ML",
+    "MR", "MTU", "NAT", "NLB", "NFR", "OIDC", "OK", "OS", "OU", "PDF", "PII", "PNG", "PR",
+    "RAG", "RAM", "RDS", "REST", "RPO", "RTO", "S3", "SAML", "SCP", "SDK", "SES", "SFTP", "SLA",
+    "SLO", "SMS", "SMTP", "SNS", "SQL", "SQS", "SSD", "SSH", "SSL", "SSO", "SVG", "TB", "TBD",
+    "TCP", "TGW", "TLS", "TODO", "UDP", "UI", "UK", "URL", "US", "USD", "UTC", "VM", "VPC",
+    "VPN", "WAF", "XML", "YAML",
+    "MUST", "SHOULD", "MAY", "NOT", "AND", "OR", "NO", "YES", "REQUIRED", "OPTIONAL"],
+
+  "allowed_account_ids": ["111122223333", "444455556666", "777788889999"],
+
+  "claim_keywords": ["quota", "quotas", "limit", "limits", "maximum", "minimum", "max",
+    "price", "prices", "priced", "pricing", "cost", "costs", "per hour", "per month",
+    "per second", "per request", "per GB", "per GiB", "per TB", "per million", "USD"],
+
+  "html_tags": ["a", "abbr", "b", "br", "code", "dd", "del", "details", "div", "dl", "dt", "em",
+    "hr", "i", "img", "ins", "kbd", "li", "mark", "ol", "p", "pre", "q", "s", "samp", "small",
+    "span", "strong", "sub", "summary", "sup", "table", "tbody", "td", "th", "thead", "tr",
+    "u", "ul", "var", "wbr"],
+
+  "front_matter_keys": ["title", "subtitle", "kind", "version", "status", "owner", "prepared_by",
+    "prepared_for", "reviewers", "audience", "classification", "date"],
+
+  "_kind_sections": "The ## sections each kind must have, in this order. A heading matches when, without its number, it starts with the name; a list gives accepted alternatives. Optional sections may sit between them.",
+  "kind_sections": {
+    "hld": [["Document history", "Document control"], "Introduction", "Architecture",
+            "How the design works", "Roles and responsibilities", "Key architecture decisions",
+            "High-level implementation steps", "AWS references"],
+    "lld": [["Document history", "Document control"], "Introduction", "Component design",
+            "Interfaces", "Configuration", "Deployment steps", "Testing", ["References", "AWS references"]],
+    "brief": ["The challenge", "The solution", "How it works", "Benefits", "Get started"],
+    "refarch": ["How it works", "Services used", "Considerations"]
+  },
+
+  "one_page": {
+    "kinds": ["brief", "refarch"],
+    "max_words": 450,
+    "why": "a one-page kind must fit one page; cut words, not the figure"
+  }
+}
