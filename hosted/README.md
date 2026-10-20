@@ -70,8 +70,8 @@ Everyone reaches the hosted agent over MCP: Amazon Quick through its connector (
 
 ```bash
 URL="$(terraform -chdir=hosted/terraform output -raw tools_gateway_url)"
-claude mcp add-json aws-architecture "{\"type\":\"stdio\",\"command\":\"uvx\",\"args\":[\"mcp-proxy-for-aws-cli@latest\",\"$URL\",\"--service\",\"bedrock-agentcore\",\"--region\",\"us-east-1\"]}"
-codex mcp add aws-architecture uvx mcp-proxy-for-aws-cli@latest "$URL" --service bedrock-agentcore --region us-east-1
+claude mcp add-json aws-architecture "{\"type\":\"stdio\",\"command\":\"uvx\",\"args\":[\"mcp-proxy-for-aws-cli@1.7.0\",\"$URL\",\"--service\",\"bedrock-agentcore\",\"--region\",\"us-east-1\"]}"
+codex mcp add aws-architecture uvx mcp-proxy-for-aws-cli@1.7.0 "$URL" --service bedrock-agentcore --region us-east-1
 ```
 
 Kiro takes the same `uvx` command and arguments in its MCP server settings.
