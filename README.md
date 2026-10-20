@@ -58,8 +58,8 @@ Add the name of the IAM role you work with (`aws sts get-caller-identity`) to `t
 
 ```bash
 URL="$(terraform -chdir=hosted/terraform output -raw tools_gateway_url)"
-claude mcp add-json aws-architecture "{\"type\":\"stdio\",\"command\":\"uvx\",\"args\":[\"mcp-proxy-for-aws-cli@latest\",\"$URL\",\"--service\",\"bedrock-agentcore\",\"--region\",\"us-east-1\"]}"
-codex mcp add aws-architecture uvx mcp-proxy-for-aws-cli@latest "$URL" --service bedrock-agentcore --region us-east-1
+claude mcp add-json aws-architecture "{\"type\":\"stdio\",\"command\":\"uvx\",\"args\":[\"mcp-proxy-for-aws-cli@1.7.0\",\"$URL\",\"--service\",\"bedrock-agentcore\",\"--region\",\"us-east-1\"]}"
+codex mcp add aws-architecture uvx mcp-proxy-for-aws-cli@1.7.0 "$URL" --service bedrock-agentcore --region us-east-1
 ```
 
 Ready configuration files for each client are in [examples/mcp-clients](examples/mcp-clients/README.md). Ask your client to draw something ("Draw a serverless REST API: Amazon API Gateway, AWS Lambda, Amazon DynamoDB"); [examples/requests.md](examples/requests.md) has more to try. It either drives the tools itself, passing file contents in the `*_source` arguments, or calls `ask_architect` to have the hosted agent do the whole job. An `ask_architect` turn takes a few minutes, so raise the client's tool timeout to 15 minutes (Claude Code: `MCP_TOOL_TIMEOUT=900000`; Codex: `tool_timeout_sec = 900`).
